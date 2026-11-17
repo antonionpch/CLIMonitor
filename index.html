@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>AGROMonitor</title>
+<style>
+  /* ---------- Tema: sigue al sistema (claro / oscuro) ---------- */
+  :root {
+    color-scheme: light dark;
+    --bg: #eef3ec;
+    --panel: #ffffff;
+    --panel-2: #f4f8f2;
+    --line: #d5e0d2;
+    --text: #0d1a12;
+    --muted: #4c5f52;
+    --accent: #17703a;
+    --accent-ink: #ffffff;
+    --danger: #b3261e;  --danger-bg: #fdecea;
+    --warn: #8a5300;    --warn-bg: #fff3d6;
+    --info: #0b5cab;    --info-bg: #e6f1fc;
+    --ok: #17703a;      --ok-bg: #e5f5ea;
+    --shadow: 0 1px 2px rgba(13, 26, 18, .06), 0 8px 24px rgba(13, 26, 18, .06);
+  }
+  /* Tema oscuro (azules). Se aplica si el sistema está en oscuro y no se forzó el claro… */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #070d18;
+      --panel: #0f1a2b;
+      --panel-2: #16243a;
+      --line: #263850;
+      --text: #f1f5fb;
+      --muted: #a5b4ca;
+      --accent: #6cb6ff;
+      --accent-ink: #04182e;
+      --danger: #ff9a92;  --danger-bg: #3a1618;
+      --warn: #ffc866;    --warn-bg: #3a2a0c;
+      --info: #a9b8ff;    --info-bg: #1b2350;
+      --ok: #62d2ea;      --ok-bg: #0d2c3c;
+      --shadow: none;
+    }
+  }
+  /* …o si se eligió manualmente con el botón de tema */
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #070d18;
+    --panel: #0f1a2b;
+    --panel-2: #16243a;
+    --line: #263850;
+    --text: #f1f5fb;
+    --muted: #a5b4ca;
+    --accent: #6cb6ff;
+    --accent-ink: #04182e;
+    --danger: #ff9a92;  --danger-bg: #3a1618;
+    --warn: #ffc866;    --warn-bg: #3a2a0c;
+    --info: #a9b8ff;    --info-bg: #1b2350;
+    --ok: #62d2ea;      --ok-bg: #0d2c3c;
+    --shadow: none;
+  }
+  :root[data-theme="light"] { color-scheme: light; }
+
+  /* ---------- Base ---------- */
+  * { box-sizing: border-box; margin: 0; }
+  html {
+    /* Escala con la pantalla: legible en laptop, 1080p y 4K */
+    font-size: clamp(13px, 0.55vw + 0.75vh, 40px);
+  }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+  }
+  button, input { font: inherit; color: inherit; }
+  :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+  /* ---------- Íconos SVG: monocromáticos, heredan el color del texto ---------- */
+  .ico {
+    width: 1em; height: 1em;
+    flex: none;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.75;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    vertical-align: -0.14em;
+  }
+
+  /* ---------- Layout principal (ocupa exactamente la pantalla) ---------- */
+  .app {
+    height: 100vh; height: 100dvh;
+    padding: 1rem;
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "header  header"
+      "clima   mapa"
+      "alertas mapa"
+      "semana  semana";
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 1rem;
+    box-shadow: var(--shadow);
+    padding: 1rem 1.1rem;
+    min-height: 0; min-width: 0;
+    display: flex; flex-direction: column;
+  }
+  .panel-head {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 1rem;
+    margin-bottom: .7rem;
+    flex: none;
+  }
+  .panel-title {
+    font-size: .85rem;
+    font-weight: 700;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .panel-note { font-size: .8rem; color: var(--muted); text-align: right; }
+
+  /* ---------- Encabezado ---------- */
+  header {
+    grid-area: header;
+    display: flex; align-items: center; gap: 1.2rem;
+    flex-wrap: wrap;
+  }
+  .brand { display: flex; align-items: center; gap: .7rem; margin-right: auto; }
+  .brand-mark {
+    width: 2.6rem; height: 2.6rem; border-radius: .7rem;
+    background: var(--accent); color: var(--accent-ink);
+    display: grid; place-items: center; font-size: 1.6rem;
+  }
+  .brand h1 { font-size: 1.6rem; line-height: 1.05; letter-spacing: -.01em; font-weight: 500; }
+  .brand h1 b { font-weight: 800; color: var(--accent); letter-spacing: .02em; }
+  .brand p { font-size: .85rem; color: var(--muted); }
+
+  .search { display: flex; gap: .5rem; flex: 1 1 22rem; max-width: 36rem; }
+  .search input {
+    flex: 1; min-width: 0;
+    padding: .7rem 1rem;
+    font-size: 1.05rem;
+    background: var(--panel);
+    border: 2px solid var(--line);
+    border-radius: .8rem;
+  }
+  .search input::placeholder { color: var(--muted); }
+  .search input:focus { border-color: var(--accent); outline: none; }
+  .btn {
+    display: inline-flex; align-items: center; gap: .5rem;
+    padding: .7rem 1.1rem;
+    font-size: 1rem; font-weight: 700;
+    border-radius: .8rem;
+    border: 2px solid var(--accent);
+    background: var(--accent); color: var(--accent-ink);
+    cursor: pointer; white-space: nowrap;
+  }
+  .btn .ico { font-size: 1.2rem; }
+  .btn.ghost { background: transparent; color: var(--text); border-color: var(--line); }
+  .btn:hover { filter: brightness(1.08); }
+  .btn.ghost:hover { border-color: var(--accent); }
+
+  .clock { text-align: right; line-height: 1.1; }
+  .clock .time { font-size: 1.9rem; font-weight: 700; }
+  .clock .date { font-size: .85rem; color: var(--muted); text-transform: capitalize; }
+
+  /* ---------- Panel de clima actual (compacto, Flexbox) ---------- */
+  #clima { grid-area: clima; }
+  .now {
+    display: flex; align-items: center; flex-wrap: wrap;
+    gap: .4rem 1rem;
+  }
+  .now-main { display: flex; align-items: center; gap: .7rem; flex: none; }
+  .now-icon { font-size: 4.4rem; stroke-width: 1.4; color: var(--accent); }
+  .now-temp { font-size: 5.2rem; font-weight: 800; line-height: 1; letter-spacing: -.04em; white-space: nowrap; }
+  .now-temp small { font-size: 2rem; font-weight: 600; color: var(--muted); letter-spacing: 0; }
+  .now-info { flex: 1 1 9rem; min-width: 0; }
+  .now-desc { font-size: 1.35rem; font-weight: 700; line-height: 1.15; }
+  .place { font-size: 1.15rem; font-weight: 600; line-height: 1.2; margin-top: .25rem; overflow-wrap: anywhere; }
+  .place-sub { font-size: .9rem; color: var(--muted); }
+
+  .metrics { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: .8rem; }
+  .metric {
+    flex: 1 1 7.5rem;
+    display: flex; align-items: center; gap: .6rem;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: .8rem;
+    padding: .55rem .7rem;
+    min-width: 0;
+  }
+  .metric > .ico { font-size: 1.9rem; color: var(--accent); }
+  .metric .m-label { font-size: .8rem; color: var(--muted); line-height: 1.15; }
+  .metric .m-value { font-size: 1.9rem; font-weight: 700; line-height: 1.05; white-space: nowrap; }
+  .metric .m-value small { font-size: .95rem; font-weight: 600; color: var(--muted); }
+
+  /* ---------- Mapa ---------- */
+  #mapa { grid-area: mapa; padding: 0; overflow: hidden; }
+  #mapa iframe { flex: 1; width: 100%; min-height: 0; border: 0; display: block; background: var(--panel-2); }
+  .layers {
+    flex: none;
+    display: flex; gap: .4rem;
+    padding: .6rem;
+    border-top: 1px solid var(--line);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .layers::-webkit-scrollbar { display: none; }
+  .layer {
+    flex: 1 0 auto;
+    display: flex; flex-direction: column; align-items: center; gap: .2rem;
+    padding: .45rem .7rem;
+    background: var(--panel-2);
+    border: 2px solid transparent;
+    border-radius: .7rem;
+    cursor: pointer;
+    font-size: .8rem; font-weight: 600;
+    color: var(--muted);
+  }
+  .layer .ico { font-size: 1.6rem; }
+  .layer:hover { border-color: var(--line); color: var(--text); }
+  .layer[aria-pressed="true"] { border-color: var(--accent); color: var(--text); background: var(--ok-bg); }
+
+  /* ---------- Alertas ---------- */
+  #alertas { grid-area: alertas; }
+  .alerts { display: flex; flex-direction: column; gap: .6rem; flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: none; }
+  .alerts::-webkit-scrollbar { display: none; }
+  .alert {
+    flex: none;
+    border-radius: .8rem;
+    padding: .65rem .9rem;
+    border-left: .45rem solid var(--c);
+    background: var(--c-bg);
+    display: flex; gap: .7rem; align-items: flex-start;
+  }
+  .alert > .ico { font-size: 1.9rem; color: var(--c); margin-top: .1rem; }
+  .alert .a-body { flex: 1; min-width: 0; }
+  .alert .a-level { font-size: .72rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--c); }
+  .alert .a-title { font-size: 1.15rem; font-weight: 700; line-height: 1.2; margin-bottom: .3rem; }
+  .alert ul { list-style: none; padding: 0; display: flex; flex-direction: column; gap: .2rem; }
+  .alert li { display: flex; gap: .45rem; font-size: .95rem; line-height: 1.3; }
+  .alert li .ico { font-size: 1.05rem; margin-top: .12rem; stroke-width: 2.4; }
+  .alert li.rec .ico { color: var(--ok); }
+  .alert li.no  .ico { color: var(--danger); }
+  .alert li b { font-weight: 700; }
+  .alert.danger { --c: var(--danger); --c-bg: var(--danger-bg); }
+  .alert.warn   { --c: var(--warn);   --c-bg: var(--warn-bg); }
+  .alert.info   { --c: var(--info);   --c-bg: var(--info-bg); }
+  .alert.ok     { --c: var(--ok);     --c-bg: var(--ok-bg); }
+
+  /* ---------- Pronóstico semanal ---------- */
+  #semana { grid-area: semana; }
+  .week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: .6rem; }
+  .day {
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: .8rem;
+    padding: .55rem .5rem;
+    text-align: center;
+  }
+  .day.today { border-color: var(--accent); border-width: 2px; }
+  .day .d-name { font-size: 1rem; font-weight: 700; text-transform: capitalize; }
+  .day .d-icon { font-size: 2.3rem; margin: .25rem 0 .15rem; stroke-width: 1.5; }
+  .day .d-temps { font-size: 1.35rem; font-weight: 700; }
+  .day .d-temps span { color: var(--muted); font-weight: 600; }
+  .day .d-rain { font-size: .9rem; color: var(--muted); margin-top: .1rem; }
+
+  /* ---------- Estado / errores ---------- */
+  .status {
+    position: fixed; left: 50%; bottom: 1.5rem; transform: translateX(-50%);
+    background: var(--text); color: var(--bg);
+    padding: .7rem 1.2rem; border-radius: 2rem;
+    font-size: 1rem; font-weight: 600;
+    max-width: 90vw; text-align: center;
+    opacity: 0; pointer-events: none; transition: opacity .25s;
+    z-index: 10;
+  }
+  .status.show { opacity: 1; }
+  .loading .now, .loading .metrics, .loading .week, .loading .alerts { opacity: .45; }
+
+  /* ---------- Pantallas angostas o verticales: una columna con scroll ---------- */
+  @media (max-width: 900px), (orientation: portrait) {
+    html { font-size: clamp(14px, 1.6vw + .6vh, 26px); }
+    .app {
+      height: auto; min-height: 100dvh;
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: auto;
+      grid-template-areas: "header" "clima" "mapa" "alertas" "semana";
+    }
+    #mapa iframe { flex: none; height: 55vh; }
+    .alerts { overflow: visible; }
+    .week { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .clock { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+
+<!-- ================= BIBLIOTECA DE ÍCONOS SVG ================= -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <!-- Marca / generales -->
+    <symbol id="i-sprout" viewBox="0 0 24 24">
+      <path d="M7 20h10"/><path d="M10 20c5.5-2.5.8-6.4 3-10"/>
+      <path d="M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.5.4-4.8-.3-1.2-.6-2.3-1.9-3-4.2 2.8-.5 4.4 0 5.5.8z"/>
+      <path d="M14.1 6a7 7 0 0 0-1.1 4c1.9-.1 3.3-.6 4.3-1.4 1-1 1.6-2.3 1.7-4.6-2.7.1-4 1-4.9 2z"/>
+    </symbol>
+    <symbol id="i-expand" viewBox="0 0 24 24">
+      <path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/>
+      <path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>
+    </symbol>
+    <symbol id="i-compress" viewBox="0 0 24 24">
+      <path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/>
+      <path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/>
+    </symbol>
+    <symbol id="i-search" viewBox="0 0 24 24">
+      <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>
+    </symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M4 12.5l5 5L20 6.5"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></symbol>
+    <symbol id="i-check-circle" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="10"/><path d="M8.5 12.5l2.5 2.5 4.5-5"/>
+    </symbol>
+
+    <!-- Estado del tiempo -->
+    <symbol id="i-sun" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="4"/>
+      <path d="M12 2v2"/><path d="M12 20v2"/><path d="M2 12h2"/><path d="M20 12h2"/>
+      <path d="M4.93 4.93l1.41 1.41"/><path d="M17.66 17.66l1.41 1.41"/>
+      <path d="M4.93 19.07l1.41-1.41"/><path d="M17.66 6.34l1.41-1.41"/>
+    </symbol>
+    <symbol id="i-cloud-sun" viewBox="0 0 24 24">
+      <path d="M12 2v2"/><path d="M4.93 4.93l1.41 1.41"/><path d="M20 12h2"/><path d="M19.07 4.93l-1.41 1.41"/>
+      <path d="M15.947 12.65a4 4 0 0 0-5.925-4.128"/>
+      <path d="M13 22H7a5 5 0 1 1 4.9-6H13a3 3 0 0 1 0 6Z"/>
+    </symbol>
+    <symbol id="i-cloud" viewBox="0 0 24 24">
+      <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>
+    </symbol>
+    <symbol id="i-fog" viewBox="0 0 24 24">
+      <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/>
+      <path d="M16 17H7"/><path d="M17 21H9"/>
+    </symbol>
+    <symbol id="i-drizzle" viewBox="0 0 24 24">
+      <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/>
+      <path d="M8 14v1"/><path d="M8 19v1"/><path d="M12 16v1"/><path d="M12 21v1"/><path d="M16 14v1"/><path d="M16 19v1"/>
+    </symbol>
+    <symbol id="i-rain" viewBox="0 0 24 24">
+      <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/>
+      <path d="M8 14v6"/><path d="M12 16v6"/><path d="M16 14v6"/>
+    </symbol>
+    <symbol id="i-snow" viewBox="0 0 24 24">
+      <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/>
+      <path d="M8 15h.01"/><path d="M8 19h.01"/><path d="M12 17h.01"/><path d="M12 21h.01"/><path d="M16 15h.01"/><path d="M16 19h.01"/>
+    </symbol>
+    <symbol id="i-storm" viewBox="0 0 24 24">
+      <path d="M6 16.326A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 .5 8.973"/>
+      <path d="M13 12l-3 5h4l-3 5"/>
+    </symbol>
+
+    <!-- Variables / capas -->
+    <symbol id="i-droplet" viewBox="0 0 24 24">
+      <path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/>
+    </symbol>
+    <symbol id="i-droplets" viewBox="0 0 24 24">
+      <path d="M7 16.3c2.2 0 4-1.83 4-4.05 0-1.16-.57-2.26-1.71-3.19S7.29 6.75 7 5.3c-.29 1.45-1.14 2.84-2.29 3.76S3 11.1 3 12.25c0 2.22 1.8 4.05 4 4.05z"/>
+      <path d="M12.56 6.6A10.97 10.97 0 0 0 14 3.02c.5 2.5 2 4.9 4 6.5s3 3.5 3 5.5a6.98 6.98 0 0 1-11.91 4.97"/>
+    </symbol>
+    <symbol id="i-droplet-off" viewBox="0 0 24 24">
+      <path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/>
+      <path d="M3 3l18 18"/>
+    </symbol>
+    <symbol id="i-wind" viewBox="0 0 24 24">
+      <path d="M12.8 19.6A2 2 0 1 0 14 16H2"/><path d="M17.5 8a2.5 2.5 0 1 1 2 4H2"/><path d="M9.8 4.4A2 2 0 1 1 11 8H2"/>
+    </symbol>
+    <symbol id="i-gust" viewBox="0 0 24 24">
+      <path d="M21 4H3"/><path d="M18 8H6"/><path d="M19 12H9"/><path d="M16 16h-6"/><path d="M11 20H9"/>
+    </symbol>
+    <symbol id="i-thermometer" viewBox="0 0 24 24">
+      <path d="M14 4v10.54a4 4 0 1 1-4 0V4a2 2 0 0 1 4 0Z"/><path d="M12 9v8"/>
+    </symbol>
+    <symbol id="i-gauge" viewBox="0 0 24 24">
+      <path d="M5 3h14"/><path d="M7 3v15a3 3 0 0 0 3 3h4a3 3 0 0 0 3-3V3"/>
+      <path d="M7 13h10"/><path d="M7 8h3"/><path d="M7 17h3"/>
+    </symbol>
+    <symbol id="i-satellite" viewBox="0 0 24 24">
+      <path d="M13 7L9 3 5 7l4 4"/><path d="M17 11l4 4-4 4-4-4"/><path d="M8 12l4 4 6-6-4-4Z"/>
+      <path d="M16 8l3-3"/><path d="M9 21a6 6 0 0 0-6-6"/>
+    </symbol>
+    <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8Z"/></symbol>
+
+    <!-- Alertas -->
+    <symbol id="i-snowflake" viewBox="0 0 24 24">
+      <path d="M2 12h20"/><path d="M12 2v20"/>
+      <path d="M20 16l-4-4 4-4"/><path d="M4 8l4 4-4 4"/><path d="M16 4l-4 4-4-4"/><path d="M8 20l4-4 4 4"/>
+    </symbol>
+    <symbol id="i-flame" viewBox="0 0 24 24">
+      <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>
+    </symbol>
+    <symbol id="i-fungus" viewBox="0 0 24 24">
+      <path d="M3 12a9 9 0 0 1 18 0Z"/><path d="M10 12v6a2 2 0 0 0 4 0v-6"/>
+      <path d="M8 8h.01"/><path d="M13 6.5h.01"/><path d="M16.5 9h.01"/>
+    </symbol>
+    <symbol id="i-leaf" viewBox="0 0 24 24">
+      <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/>
+      <path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/>
+    </symbol>
+    <symbol id="i-bug" viewBox="0 0 24 24">
+      <path d="M12 7a4 4 0 0 1 4 4v4a4 4 0 0 1-8 0v-4a4 4 0 0 1 4-4Z"/>
+      <path d="M9.5 4l1.2 3.2"/><path d="M14.5 4l-1.2 3.2"/>
+      <path d="M8 12H4"/><path d="M20 12h-4"/><path d="M8 16l-3 2"/><path d="M16 16l3 2"/><path d="M12 11v8"/>
+    </symbol>
+  </defs>
+</svg>
+
+<div class="app" id="app">
+
+  <!-- ENCABEZADO -->
+  <header>
+    <div class="brand">
+      <div class="brand-mark"><svg class="ico" aria-hidden="true"><use href="#i-sprout"/></svg></div>
+      <div>
+        <h1><b>AGRO</b>Monitor</h1>
+        <p>Monitoreo agroclimático en tiempo real</p>
+      </div>
+    </div>
+
+    <form class="search" id="searchForm" role="search">
+      <input id="searchInput" type="search" autocomplete="off"
+             placeholder="Buscar municipio… (ej. Zamora, Michoacán)"
+             aria-label="Buscar municipio">
+      <button class="btn" type="submit">
+        <svg class="ico" aria-hidden="true"><use href="#i-search"/></svg>Buscar
+      </button>
+    </form>
+
+    <button class="btn ghost" id="themeBtn" type="button" title="Cambiar tema (tecla T)">
+      <svg class="ico" aria-hidden="true"><use id="themeIcon" href="#i-moon"/></svg>
+      <span id="themeLabel">Tema oscuro</span>
+    </button>
+
+    <button class="btn ghost" id="fsBtn" type="button" title="Pantalla completa (tecla F)">
+      <svg class="ico" aria-hidden="true"><use id="fsIcon" href="#i-expand"/></svg>
+      <span id="fsLabel">Pantalla completa</span>
+    </button>
+
+    <div class="clock" aria-live="off">
+      <div class="time" id="clockTime">--:--</div>
+      <div class="date" id="clockDate"></div>
+    </div>
+  </header>
+
+  <!-- CLIMA ACTUAL -->
+  <section class="panel" id="clima" aria-label="Clima actual">
+    <div class="panel-head">
+      <div class="panel-title">Clima actual</div>
+      <div class="panel-note" id="updated"></div>
+    </div>
+
+    <div class="now">
+      <div class="now-main">
+        <svg class="ico now-icon" aria-hidden="true"><use id="nowIcon" href="#i-cloud-sun"/></svg>
+        <div class="now-temp"><span id="nowTemp">--</span><small>°C</small></div>
+      </div>
+      <div class="now-info">
+        <div class="now-desc" id="nowDesc">Cargando…</div>
+        <div class="place" id="placeName"></div>
+        <div class="place-sub" id="placeSub"></div>
+      </div>
+    </div>
+
+    <div class="metrics">
+      <div class="metric">
+        <svg class="ico" aria-hidden="true"><use href="#i-droplet"/></svg>
+        <div>
+          <div class="m-label">Humedad relativa</div>
+          <div class="m-value"><span id="nowHum">--</span> <small>%</small></div>
+        </div>
+      </div>
+      <div class="metric" title="Probabilidad de lluvia">
+        <svg class="ico" aria-hidden="true"><use href="#i-rain"/></svg>
+        <div>
+          <div class="m-label">Prob. de lluvia</div>
+          <div class="m-value"><span id="nowRain">--</span> <small>%</small></div>
+        </div>
+      </div>
+      <div class="metric">
+        <svg class="ico" aria-hidden="true"><use href="#i-wind"/></svg>
+        <div>
+          <div class="m-label">Viento</div>
+          <div class="m-value"><span id="nowWind">--</span> <small>km/h</small></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- MAPA WINDY -->
+  <section class="panel" id="mapa" aria-label="Mapa meteorológico">
+    <iframe id="windy" title="Mapa meteorológico Windy" loading="eager" allowfullscreen></iframe>
+    <div class="layers" id="layers" role="group" aria-label="Capas del mapa"></div>
+  </section>
+
+  <!-- ALERTAS -->
+  <section class="panel" id="alertas" aria-label="Alertas agronómicas">
+    <div class="panel-head"><div class="panel-title">Alertas agronómicas</div></div>
+    <div class="alerts" id="alertList" aria-live="polite"></div>
+  </section>
+
+  <!-- PRONÓSTICO 7 DÍAS -->
+  <section class="panel" id="semana" aria-label="Pronóstico a 7 días">
+    <div class="panel-head"><div class="panel-title">Pronóstico a 7 días</div></div>
+    <div class="week" id="week"></div>
+  </section>
+</div>
+
+<div class="status" id="status" role="status"></div>
+
+<script>
+(() => {
+  'use strict';
+
+  /* ================= CONFIGURACIÓN ================= */
+  const DEFAULT_PLACE = 'Texcoco, Estado de México';
+  const REFRESH_MS    = 10 * 60 * 1000;   // refresco automático del clima (10 min)
+  const MAP_ZOOM      = 8;
+  const MAX_ALERTS    = 3;                // máximo de alertas visibles en pantalla
+
+  // Capas de Windy útiles para agricultura (icon = id del símbolo SVG)
+  const LAYERS = [
+    { id: 'clouds',    icon: 'i-cloud',       label: 'Nubes' },
+    { id: 'satellite', icon: 'i-satellite',   label: 'Satélite' },
+    { id: 'rain',      icon: 'i-rain',        label: 'Lluvia' },
+    { id: 'rainAccu',  icon: 'i-gauge',       label: 'Lluvia acum.' },
+    { id: 'temp',      icon: 'i-thermometer', label: 'Temperatura' },
+    { id: 'rh',        icon: 'i-droplet',     label: 'Humedad' },
+    { id: 'dewpoint',  icon: 'i-droplets',    label: 'Punto de rocío' },
+    { id: 'wind',      icon: 'i-wind',        label: 'Viento' },
+    { id: 'gust',      icon: 'i-gust',        label: 'Rachas' },
+    { id: 'cape',      icon: 'i-bolt',        label: 'Tormentas' }
+  ];
+
+  // Códigos WMO de Open-Meteo -> [id de ícono SVG, descripción]
+  const WMO = {
+    0: ['i-sun', 'Despejado'], 1: ['i-cloud-sun', 'Mayormente despejado'],
+    2: ['i-cloud-sun', 'Parcialmente nublado'], 3: ['i-cloud', 'Nublado'],
+    45: ['i-fog', 'Niebla'], 48: ['i-fog', 'Niebla con escarcha'],
+    51: ['i-drizzle', 'Llovizna ligera'], 53: ['i-drizzle', 'Llovizna'], 55: ['i-drizzle', 'Llovizna intensa'],
+    56: ['i-drizzle', 'Llovizna helada'], 57: ['i-drizzle', 'Llovizna helada intensa'],
+    61: ['i-rain', 'Lluvia ligera'], 63: ['i-rain', 'Lluvia moderada'], 65: ['i-rain', 'Lluvia fuerte'],
+    66: ['i-rain', 'Lluvia helada'], 67: ['i-rain', 'Lluvia helada fuerte'],
+    71: ['i-snow', 'Nevada ligera'], 73: ['i-snow', 'Nevada'], 75: ['i-snow', 'Nevada fuerte'], 77: ['i-snow', 'Granos de nieve'],
+    80: ['i-drizzle', 'Chubascos ligeros'], 81: ['i-rain', 'Chubascos'], 82: ['i-rain', 'Chubascos fuertes'],
+    85: ['i-snow', 'Chubascos de nieve'], 86: ['i-snow', 'Chubascos de nieve fuertes'],
+    95: ['i-storm', 'Tormenta eléctrica'], 96: ['i-storm', 'Tormenta con granizo'], 99: ['i-storm', 'Tormenta con granizo fuerte']
+  };
+  const wmo = code => WMO[code] || ['i-thermometer', 'Sin descripción'];
+
+  /* ================= UTILIDADES ================= */
+  const state = { lat: null, lon: null, name: '', sub: '', overlay: 'clouds' };
+  const $ = id => document.getElementById(id);
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  let statusTimer = null;
+
+  // Crea <svg class="ico"><use href="#id"/></svg>
+  function icon(id, extraClass, label) {
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('class', 'ico' + (extraClass ? ' ' + extraClass : ''));
+    if (label) { svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', label); }
+    else svg.setAttribute('aria-hidden', 'true');
+    const use = document.createElementNS(SVG_NS, 'use');
+    use.setAttribute('href', '#' + id);
+    svg.append(use);
+    return svg;
+  }
+
+  function showStatus(msg, ms = 5000) {
+    const el = $('status');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(statusTimer);
+    if (ms) statusTimer = setTimeout(() => el.classList.remove('show'), ms);
+  }
+  const hideStatus = () => $('status').classList.remove('show');
+
+  /* ================= 1. GEOCODIFICACIÓN (Nominatim) ================= */
+  async function geocode(query) {
+    const url = 'https://nominatim.openstreetmap.org/search?' + new URLSearchParams({
+      q: query, format: 'jsonv2', limit: '1', addressdetails: '1', 'accept-language': 'es'
+    });
+    const res = await fetch(url, { headers: { Accept: 'application/json' } });
+    if (!res.ok) throw new Error('Nominatim respondió ' + res.status);
+    const data = await res.json();
+    if (!data.length) return null;
+
+    const r = data[0], a = r.address || {};
+    const name = r.name || a.municipality || a.city || a.town || a.village || a.county || query;
+    const sub  = [a.state, a.country].filter(Boolean).join(', ');
+    return { lat: parseFloat(r.lat), lon: parseFloat(r.lon), name, sub };
+  }
+
+  /* ================= 2. CLIMA (Open-Meteo) ================= */
+  async function fetchWeather(lat, lon) {
+    const url = 'https://api.open-meteo.com/v1/forecast?' + new URLSearchParams({
+      latitude: lat, longitude: lon,
+      current: 'temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code',
+      hourly: 'precipitation_probability',
+      daily: 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max',
+      wind_speed_unit: 'kmh',
+      timezone: 'auto',
+      forecast_days: '7'
+    });
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Open-Meteo respondió ' + res.status);
+    return res.json();
+  }
+
+  // Probabilidad de lluvia de la hora en curso (viene en la serie horaria)
+  function currentRainProbability(data) {
+    const hours = data.hourly?.time || [];
+    const probs = data.hourly?.precipitation_probability || [];
+    const hourKey = (data.current?.time || '').slice(0, 13) + ':00';
+    const i = hours.indexOf(hourKey);
+    if (i >= 0 && probs[i] != null) return probs[i];
+    return data.daily?.precipitation_probability_max?.[0] ?? null;
+  }
+
+  function renderWeather(data) {
+    const c = data.current;
+    const [iconId, desc] = wmo(c.weather_code);
+    const rain = currentRainProbability(data);
+
+    $('nowIcon').setAttribute('href', '#' + iconId);
+    $('nowDesc').textContent = desc;
+    $('nowTemp').textContent = Math.round(c.temperature_2m);
+    $('nowHum').textContent  = Math.round(c.relative_humidity_2m);
+    $('nowRain').textContent = rain == null ? '--' : Math.round(rain);
+    $('nowWind').textContent = Math.round(c.wind_speed_10m);
+    $('updated').textContent = 'Actualizado ' +
+      new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) +
+      ' · Open-Meteo';
+
+    return {
+      temp: c.temperature_2m,
+      hum: c.relative_humidity_2m,
+      wind: c.wind_speed_10m,
+      rain,
+      weekMin: Math.min(...(data.daily?.temperature_2m_min || [Infinity]))
+    };
+  }
+
+  /* ================= 5. PRONÓSTICO A 7 DÍAS ================= */
+  function renderWeek(daily) {
+    const box = $('week');
+    box.replaceChildren();
+    if (!daily?.time) return;
+
+    daily.time.forEach((iso, i) => {
+      const [y, m, d] = iso.split('-').map(Number);
+      const date = new Date(y, m - 1, d);                 // fecha local, sin desfase de zona horaria
+      const [iconId, desc] = wmo(daily.weather_code[i]);
+      const prob = daily.precipitation_probability_max[i];
+
+      const el = document.createElement('div');
+      el.className = 'day' + (i === 0 ? ' today' : '');
+      el.title = desc;
+
+      const name = document.createElement('div');
+      name.className = 'd-name';
+      name.textContent = i === 0 ? 'Hoy'
+        : date.toLocaleDateString('es-MX', { weekday: 'short' }).replace('.', '') + ' ' + d;
+
+      const temps = document.createElement('div');
+      temps.className = 'd-temps';
+      const min = document.createElement('span');
+      min.textContent = ' / ' + Math.round(daily.temperature_2m_min[i]) + '°';
+      temps.append(Math.round(daily.temperature_2m_max[i]) + '°', min);
+
+      const rain = document.createElement('div');
+      rain.className = 'd-rain';
+      rain.append(icon('i-droplet', '', 'Probabilidad de lluvia'),
+                  ' ' + (prob == null ? '--' : Math.round(prob)) + ' %');
+
+      el.append(name, icon(iconId, 'd-icon', desc), temps, rain);
+      box.append(el);
+    });
+  }
+
+  /* ================= 3. MAPA WINDY ================= */
+  function buildWindyUrl(lat, lon, zoom, overlay) {
+    const p = new URLSearchParams({
+      lat: lat.toFixed(4), lon: lon.toFixed(4),
+      detailLat: lat.toFixed(4), detailLon: lon.toFixed(4),
+      zoom: String(zoom),
+      level: 'surface',
+      overlay,
+      product: 'ecmwf',
+      menu: '', message: 'true', marker: 'true',
+      calendar: 'now', pressure: '',
+      type: 'map', location: 'coordinates', detail: '',
+      metricWind: 'km/h', metricTemp: '°C', radarRange: '-1'
+    });
+    return 'https://embed.windy.com/embed2.html?' + p.toString();
+  }
+
+  // Actualiza lat / lon / zoom / capa del iframe
+  function updateMap(lat = state.lat, lon = state.lon, zoom = MAP_ZOOM, overlay = state.overlay) {
+    if (lat == null || lon == null) return;
+    $('windy').src = buildWindyUrl(lat, lon, zoom, overlay);
+  }
+
+  function renderLayerButtons() {
+    const box = $('layers');
+    LAYERS.forEach(l => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'layer';
+      b.dataset.layer = l.id;
+      b.setAttribute('aria-pressed', String(l.id === state.overlay));
+      b.append(icon(l.icon), l.label);
+      box.append(b);
+    });
+    box.addEventListener('click', e => {
+      const b = e.target.closest('.layer');
+      if (!b || b.dataset.layer === state.overlay) return;
+      state.overlay = b.dataset.layer;
+      box.querySelectorAll('.layer').forEach(x =>
+        x.setAttribute('aria-pressed', String(x === b)));
+      updateMap();
+    });
+  }
+
+  /* ================= 4. MOTOR DE ALERTAS AGRONÓMICAS ================= */
+  // Cada regla: condición sobre el clima -> recomendación técnica en dos puntos:
+  //   rec = "Recomendado"  ·  no = "No recomendado"
+  // pr (prioridad): 3 = crítica, 2 = precaución, 1 = informativa
+  const RULES = [
+    { test: w => w.temp <= 4, level: 'danger', pr: 3, icon: 'i-snowflake',
+      title: 'Riesgo de helada',
+      rec: 'Riego ligero al atardecer para elevar la inercia térmica del suelo y cubrir cultivos sensibles con manta térmica.',
+      no:  'Podar, trasplantar o aplicar nitrógeno que estimule brotes tiernos.' },
+    { test: w => w.temp > 30, level: 'danger', pr: 3, icon: 'i-flame',
+      title: 'Estrés hídrico inminente',
+      rec: 'Regar en la madrugada o al atardecer y verificar presión y uniformidad del sistema de riego.',
+      no:  'Aplicar agroquímicos o fertilizantes foliares entre las 11:00 y las 16:00 h.' },
+    { test: w => w.hum > 75, level: 'danger', pr: 3, icon: 'i-fungus',
+      title: 'Alto riesgo de patógenos fúngicos',
+      rec: 'Monitorear el tercio inferior de la planta, ventilar el dosel y aplicar fungicida preventivo de contacto.',
+      no:  'Riego por aspersión o riegos vespertinos que prolonguen la humedad foliar.' },
+    { test: w => w.hum > 75 && w.temp >= 18 && w.temp <= 28, level: 'warn', pr: 2, icon: 'i-leaf',
+      title: 'Condiciones favorables para tizón y mildiu',
+      rec: 'Muestrear cada 48 h y retirar de la parcela el tejido con síntomas.',
+      no:  'Realizar labores con el follaje mojado: dispersan esporas entre plantas.' },
+    { test: w => w.wind > 20, level: 'warn', pr: 2, icon: 'i-wind',
+      title: 'Viento fuerte',
+      rec: 'Posponer aspersiones hasta que el viento baje de 10 km/h y revisar tutores y anclajes.',
+      no:  'Aplicar herbicidas o insecticidas: alto riesgo de deriva a cultivos vecinos.' },
+    { test: w => w.rain != null && w.rain >= 60, level: 'warn', pr: 2, icon: 'i-rain',
+      title: 'Lluvia probable',
+      rec: 'Reprogramar aplicaciones foliares a una ventana de al menos 6 h sin lluvia y despejar drenes.',
+      no:  'Fertilizar con nitrógeno al voleo: se pierde por lixiviación y escurrimiento.' },
+    { test: w => w.hum < 30, level: 'warn', pr: 2, icon: 'i-droplet-off',
+      title: 'Humedad muy baja: alta evapotranspiración',
+      rec: 'Riegos más cortos y frecuentes; conservar acolchado o cobertura sobre el suelo.',
+      no:  'Asperjar con gota fina (se evapora antes de llegar a la hoja) o laborear suelo húmedo.' },
+    { test: w => w.temp > 26 && w.hum < 50, level: 'info', pr: 1, icon: 'i-bug',
+      title: 'Ambiente favorable para ácaros y trips',
+      rec: 'Revisar con lupa el envés de las hojas en orillas y zonas polvosas del lote.',
+      no:  'Aplicar insecticidas de amplio espectro sin muestreo: eliminan enemigos naturales.' },
+    { test: w => w.weekMin <= 2 && w.temp > 4, level: 'info', pr: 1, icon: 'i-snowflake',
+      title: 'Helada en el pronóstico semanal',
+      rec: 'Preparar cubiertas y programar un riego previo a la noche más fría.',
+      no:  'Trasplantar o sembrar especies sensibles al frío durante esta semana.' }
+  ];
+
+  function evaluateAlerts(w) {
+    const hits = RULES.filter(r => r.test(w)).sort((a, b) => b.pr - a.pr).slice(0, MAX_ALERTS);
+    if (hits.length) return hits;
+    return [{
+      level: 'ok', icon: 'i-check-circle',
+      title: 'Condiciones favorables para labores de campo',
+      rec: 'Realizar aplicaciones foliares, fertilización y labores culturales; mantener el monitoreo de rutina.',
+      no:  'Aplicar sin calibrar antes el equipo de aspersión.'
+    }];
+  }
+
+  const LEVEL_LABEL = { danger: 'Alerta', warn: 'Precaución', info: 'Aviso', ok: 'Sin riesgo' };
+
+  function alertPoint(cls, iconId, label, text) {
+    const li = document.createElement('li');
+    li.className = cls;
+    const span = document.createElement('span');
+    const b = document.createElement('b');
+    b.textContent = label + ': ';
+    span.append(b, text);
+    li.append(icon(iconId), span);
+    return li;
+  }
+
+  function renderAlerts(w) {
+    const box = $('alertList');
+    box.replaceChildren();
+    evaluateAlerts(w).forEach(a => {
+      const el = document.createElement('article');
+      el.className = 'alert ' + a.level;
+
+      const body = document.createElement('div');
+      body.className = 'a-body';
+
+      const level = document.createElement('div');
+      level.className = 'a-level';
+      level.textContent = LEVEL_LABEL[a.level];
+
+      const title = document.createElement('div');
+      title.className = 'a-title';
+      title.textContent = a.title;
+
+      const list = document.createElement('ul');
+      list.append(
+        alertPoint('rec', 'i-check', 'Recomendado', a.rec),
+        alertPoint('no',  'i-x',     'No recomendado', a.no)
+      );
+
+      body.append(level, title, list);
+      el.append(icon(a.icon), body);
+      box.append(el);
+    });
+  }
+
+  /* ================= FLUJO PRINCIPAL ================= */
+  async function loadWeather() {
+    if (state.lat == null) return;
+    const data = await fetchWeather(state.lat, state.lon);
+    const w = renderWeather(data);
+    renderWeek(data.daily);
+    renderAlerts(w);
+  }
+
+  async function searchPlace(query) {
+    query = query.trim();
+    if (!query) return;
+    const app = $('app');
+    app.classList.add('loading');
+    showStatus('Buscando "' + query + '"…', 0);
+
+    try {
+      const place = await geocode(query);
+      if (!place) {
+        showStatus('No se encontró "' + query + '". Intenta agregar el estado.');
+        return;
+      }
+      Object.assign(state, place);
+      $('placeName').textContent = place.name;
+      $('placeSub').textContent  = place.sub;
+
+      updateMap(place.lat, place.lon, MAP_ZOOM, state.overlay);
+      await loadWeather();
+      hideStatus();
+    } catch (err) {
+      console.error(err);
+      showStatus('No se pudo obtener la información. Revisa la conexión a internet.');
+    } finally {
+      app.classList.remove('loading');
+    }
+  }
+
+  /* ================= PANTALLA COMPLETA ================= */
+  function toggleFullscreen() {
+    const d = document, el = d.documentElement;
+    if (d.fullscreenElement || d.webkitFullscreenElement) {
+      (d.exitFullscreen || d.webkitExitFullscreen).call(d);
+    } else {
+      const req = el.requestFullscreen || el.webkitRequestFullscreen;
+      if (req) req.call(el); else showStatus('Este navegador no permite pantalla completa. Usa F11.');
+    }
+  }
+  function syncFsButton() {
+    const on = !!(document.fullscreenElement || document.webkitFullscreenElement);
+    $('fsIcon').setAttribute('href', on ? '#i-compress' : '#i-expand');
+    $('fsLabel').textContent = on ? 'Salir' : 'Pantalla completa';
+  }
+
+  /* ================= TEMA CLARO / OSCURO ================= */
+  // Sin elección manual se sigue al sistema; el botón fija el tema y lo recuerda.
+  const THEME_KEY = 'agromonitor-theme';
+  const systemDark = window.matchMedia('(prefers-color-scheme: dark)');
+
+  function currentTheme() {
+    return document.documentElement.dataset.theme || (systemDark.matches ? 'dark' : 'light');
+  }
+  function syncThemeButton() {
+    const dark = currentTheme() === 'dark';
+    // El botón muestra el tema al que se cambiará
+    $('themeIcon').setAttribute('href', dark ? '#i-sun' : '#i-moon');
+    $('themeLabel').textContent = dark ? 'Tema claro' : 'Tema oscuro';
+  }
+  function toggleTheme() {
+    const next = currentTheme() === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem(THEME_KEY, next); } catch (e) { /* almacenamiento no disponible */ }
+    syncThemeButton();
+  }
+  try {
+    const saved = localStorage.getItem(THEME_KEY);
+    if (saved === 'dark' || saved === 'light') document.documentElement.dataset.theme = saved;
+  } catch (e) { /* almacenamiento no disponible */ }
+  systemDark.addEventListener?.('change', syncThemeButton);
+
+  /* ================= RELOJ ================= */
+  function tick() {
+    const now = new Date();
+    $('clockTime').textContent = now.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+    $('clockDate').textContent = now.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
+  }
+
+  /* ================= INICIO ================= */
+  renderLayerButtons();
+  tick();
+  setInterval(tick, 10000);
+
+  $('searchForm').addEventListener('submit', e => {
+    e.preventDefault();
+    const input = $('searchInput');
+    searchPlace(input.value);
+    input.blur();
+  });
+
+  syncThemeButton();
+  $('themeBtn').addEventListener('click', toggleTheme);
+  document.addEventListener('keydown', e => {
+    if (e.key.toLowerCase() === 't' && !e.target.closest('input') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      toggleTheme();
+    }
+  });
+
+  $('fsBtn').addEventListener('click', toggleFullscreen);
+  document.addEventListener('fullscreenchange', syncFsButton);
+  document.addEventListener('webkitfullscreenchange', syncFsButton);
+  document.addEventListener('keydown', e => {
+    if (e.key.toLowerCase() === 'f' && !e.target.closest('input') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      toggleFullscreen();
+    }
+  });
+
+  // Refresco automático para uso en señalización digital
+  setInterval(() => {
+    loadWeather().catch(err => console.error('Refresco fallido:', err));
+  }, REFRESH_MS);
+
+  // Primera carga
+  searchPlace(DEFAULT_PLACE);
+})();
+</script>
+</body>
+</html>
